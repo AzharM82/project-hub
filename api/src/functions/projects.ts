@@ -7,8 +7,18 @@ async function projectsHandler(
   ctx: InvocationContext,
 ): Promise<HttpResponseInit> {
   try {
+    // Reseed: delete all existing and re-create
+    if (req.query.get("reseed") === "true") {
+      const client0 = await getProjectsClient();
+      const existing = client0.listEntities({ queryOptions: { filter: "PartitionKey eq 'projects'" } });
+      for await (const e of existing) {
+        await client0.deleteEntity(e.partitionKey!, e.rowKey!);
+      }
+      ctx.log("Cleared existing projects for reseed");
+    }
+
     // Seed on first request if needed
-    if (req.query.get("seed") === "true") {
+    if (req.query.get("seed") === "true" || req.query.get("reseed") === "true") {
       const result = await seedData();
       ctx.log(`Seeded ${result.projects} projects, ${result.backlog} backlog items`);
     }
