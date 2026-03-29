@@ -2,6 +2,7 @@ import { TableClient, TableServiceClient } from "@azure/data-tables";
 
 let projectsClient: TableClient | null = null;
 let backlogClient: TableClient | null = null;
+let maintenanceClient: TableClient | null = null;
 
 function getConnectionString(): string {
   const conn = process.env.TABLE_STORAGE_CONNECTION_STRING;
@@ -32,4 +33,11 @@ export async function getBacklogClient(): Promise<TableClient> {
     backlogClient = await ensureTable("Backlog");
   }
   return backlogClient;
+}
+
+export async function getMaintenanceClient(): Promise<TableClient> {
+  if (!maintenanceClient) {
+    maintenanceClient = await ensureTable("Maintenance");
+  }
+  return maintenanceClient;
 }

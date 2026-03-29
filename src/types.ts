@@ -19,4 +19,15 @@ export interface BacklogItem {
   createdAt: string;
 }
 
-export type Page = "projects" | "backlog";
+export interface MaintenanceTask {
+  id: string;
+  project: string;
+  task: string;
+  category: string;
+  dueDate: string;
+  status: string;
+  notes: string;
+  createdAt: string;
+}
+
+export type Page = "projects" | "backlog" | "admin";

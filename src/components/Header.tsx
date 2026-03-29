@@ -45,6 +45,17 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
         >
           Backlog
         </button>
+        <button
+          onClick={() => onNavigate("admin")}
+          className={`text-sm font-semibold uppercase tracking-wider pb-1 transition-colors ${
+            currentPage === "admin"
+              ? "text-t-text border-b-2 border-t-text"
+              : "text-t-muted hover:text-t-text"
+          }`}
+          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+        >
+          Admin
+        </button>
       </div>
     </header>
   );
