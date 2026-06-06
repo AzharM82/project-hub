@@ -8,11 +8,13 @@
     "start": "func start"
   },
   "dependencies": {
+    "@azure/data-tables": "^13.3.0",
     "@azure/functions": "^4.6.0",
-    "@azure/data-tables": "^13.3.0"
+    "nodemailer": "^8.0.10"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.0",
     "typescript": "^5.7.0"
   }
 }

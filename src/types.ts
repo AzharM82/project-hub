@@ -7,6 +7,8 @@ export interface Project {
   stack: string;
   status: string;
   cost: string;
+  category: string;
+  details: string;
 }
 
 export interface BacklogItem {

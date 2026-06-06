@@ -1,0 +1,15 @@
+name: Daily maintenance reminder
+
+on:
+  schedule:
+    # 14:00 UTC = 7 AM PDT / 6 AM PST — daily email if anything is overdue or due within 5 days
+    - cron: "0 14 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reminder endpoint
+        run: |
+          curl -sf -X POST "https://victorious-mud-0c0ea020f.1.azurestaticapps.net/api/maintenance-remind?secret=${{ secrets.SCAN_SECRET }}"
