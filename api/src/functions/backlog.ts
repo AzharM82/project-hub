@@ -1,12 +1,22 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
-import { getBacklogClient } from "../lib/storage.js";
+import { getBacklogClient, addTombstone } from "../lib/storage.js";
+import { isWriteAllowed, unauthorized } from "../lib/auth.js";
 
 interface BacklogInput {
   title?: string;
   description?: string;
   category?: string;
+  area?: string;
   priority?: string;
   status?: string;
+}
+
+const AREAS = ["Trading", "Learning", "Productivity", "Infrastructure", "Personal & Faith"];
+const PRIORITIES = ["high", "medium", "low"];
+const STATUSES = ["idea", "planned", "in-progress", "done", "dropped"];
+
+function pick(v: string | undefined, allowed: string[], fallback: string): string {
+  return v && allowed.includes(v) ? v : fallback;
 }
 
 async function backlogHandler(
@@ -14,6 +24,9 @@ async function backlogHandler(
   _ctx: InvocationContext,
 ): Promise<HttpResponseInit> {
   try {
+    // Writes need the key; checked before touching storage so a missing key is a clean 401.
+    if (req.method !== "GET" && !isWriteAllowed(req)) return unauthorized();
+
     const client = await getBacklogClient();
 
     // ─── GET ─────────────────────────────────────────
@@ -27,21 +40,22 @@ async function backlogHandler(
         items.push({
           id: entity.rowKey,
           title: entity.title,
-          description: entity.description,
-          category: entity.category,
-          priority: entity.priority,
-          status: entity.status,
-          createdAt: entity.createdAt,
+          description: entity.description ?? "",
+          category: entity.category ?? "",
+          area: entity.area ?? "Trading",
+          priority: entity.priority ?? "medium",
+          status: entity.status ?? "idea",
+          createdAt: entity.createdAt ?? "",
+          updatedAt: entity.updatedAt ?? entity.createdAt ?? "",
         });
       }
 
-      // Sort by priority (high first), then by createdAt
       const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
       items.sort((a, b) => {
         const pa = priorityOrder[a.priority as string] ?? 3;
         const pb = priorityOrder[b.priority as string] ?? 3;
         if (pa !== pb) return pa - pb;
-        return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
+        return String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
       });
 
       return { jsonBody: items };
@@ -50,35 +64,29 @@ async function backlogHandler(
     // ─── POST ────────────────────────────────────────
     if (req.method === "POST") {
       const body = (await req.json()) as BacklogInput;
-      if (!body.title) {
+      const title = body.title?.trim();
+      if (!title) {
         return { status: 400, jsonBody: { error: "Title is required" } };
       }
 
-      const rowKey = `${Date.now()}-${body.title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 40)}`;
-
-      await client.createEntity({
+      const rowKey = `${Date.now()}-${title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 40)}`;
+      const now = new Date().toISOString();
+      const entity = {
         partitionKey: "backlog",
         rowKey,
-        title: body.title,
+        title,
         description: body.description ?? "",
-        category: body.category ?? "Tool",
-        priority: body.priority ?? "medium",
-        status: body.status ?? "idea",
-        createdAt: new Date().toISOString(),
-      });
-
-      return {
-        status: 201,
-        jsonBody: {
-          id: rowKey,
-          title: body.title,
-          description: body.description ?? "",
-          category: body.category ?? "Tool",
-          priority: body.priority ?? "medium",
-          status: body.status ?? "idea",
-          createdAt: new Date().toISOString(),
-        },
+        category: body.category?.trim() || "Idea",
+        area: pick(body.area, AREAS, "Trading"),
+        priority: pick(body.priority, PRIORITIES, "medium"),
+        status: pick(body.status, STATUSES, "idea"),
+        createdAt: now,
+        updatedAt: now,
+        seeded: false,
       };
+
+      await client.createEntity(entity);
+      return { status: 201, jsonBody: { id: rowKey, ...entity } };
     }
 
     // ─── PUT ─────────────────────────────────────────
@@ -87,20 +95,21 @@ async function backlogHandler(
       if (!id) return { status: 400, jsonBody: { error: "id query param required" } };
 
       const body = (await req.json()) as BacklogInput;
-
-      // Get existing entity
       const existing = await client.getEntity("backlog", id);
 
       await client.updateEntity(
         {
           partitionKey: "backlog",
           rowKey: id,
-          title: body.title ?? existing.title,
-          description: body.description ?? existing.description,
-          category: body.category ?? existing.category,
-          priority: body.priority ?? existing.priority,
-          status: body.status ?? existing.status,
+          title: body.title?.trim() || (existing.title as string),
+          description: body.description ?? (existing.description as string) ?? "",
+          category: body.category ?? (existing.category as string) ?? "",
+          area: pick(body.area, AREAS, (existing.area as string) ?? "Trading"),
+          priority: pick(body.priority, PRIORITIES, (existing.priority as string) ?? "medium"),
+          status: pick(body.status, STATUSES, (existing.status as string) ?? "idea"),
           createdAt: existing.createdAt,
+          updatedAt: new Date().toISOString(),
+          seeded: existing.seeded === true,
         },
         "Replace",
       );
@@ -113,6 +122,10 @@ async function backlogHandler(
       const id = req.query.get("id");
       if (!id) return { status: 400, jsonBody: { error: "id query param required" } };
 
+      try {
+        const existing = await client.getEntity("backlog", id);
+        if (existing.seeded === true) await addTombstone("backlog", id);
+      } catch { /* not found */ }
       await client.deleteEntity("backlog", id);
       return { jsonBody: { ok: true } };
     }

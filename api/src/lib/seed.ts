@@ -1,10 +1,11 @@
-import { getProjectsClient, getBacklogClient } from "./storage.js";
+import { getProjectsClient, getBacklogClient, getTombstones } from "./storage.js";
 
 // Bump this whenever PROJECTS/BACKLOG below change — the API reseeds once per version.
-export const SEED_VERSION = "2026-06-05-full-inventory-v3";
+export const SEED_VERSION = "2026-09-04-areas-v4";
 
 interface ProjectSeed {
   name: string;
+  area: string; // Trading | Learning | Productivity | Infrastructure | Personal & Faith
   url: string;
   github: string;
   purpose: string;
@@ -21,42 +22,39 @@ const PROJECTS: ProjectSeed[] = [
     name: "DTSWAI — Day Trading Stocks With Algo",
     url: "https://wonderful-stone-02fa9530f.7.azurestaticapps.net",
     github: "https://github.com/AzharM82/DTSWAI",
-    purpose:
-      "THE day-trade algo. Consolidates StockAgentHub (Schwab + algo), tos-reversal-scanner (chart-truth OCR signals), and MTF portal patterns into one repo + portal + cloud. v1 deployed 2026-05-24 in PAPER MODE.",
-    stack: "Python Azure Functions, React 19 + Vite portal (Spark/Cool Slate design), Schwab API, Azure Table Storage + Queue, WhatsApp sidecar, Google Sign-In auth",
-    status: "paper",
+    purpose: "THE day-trade system, LIVE with real money since 2026-07-30. Hybrid model: DESKTOP1 chart-truth scanner emits alerts only; operator executes manually from the portal Orders page with optional 1:1 fan-out to ~23 live Alpaca subscribers.",
+    stack: "Python Azure Functions, React 19 + Vite portal, Alpaca API (master + subscribers), Azure Table Storage + Queue, WhatsApp sidecar, Google Sign-In auth",
+    status: "live",
     cost: "$0/mo",
     category: "Day Trade Algo",
+    area: "Trading",
     details: [
-      "Chart truth: local scanner OCRs the TOS Azhar_Reversal strip and POSTs ticker + buy/SL/TP to /api/scanner-alert — the cloud NEVER re-derives the reversal; entry runs inline in the POST handler",
-      "Cloud orchestrator is monitor-only on a 5-min cron; exits: trailing 2-bar-low stop (ratchets up only, real-time Schwab quotes), TP 5%, D1, EOD",
-      "Risk: $1k/ticker, $5k total, max 5 tickers, no trades first 30 min / last 15 min; paper_mode + master trading_enabled kill-switch in portal Config (TradingConfig table)",
-      "WhatsApp alert on every BUY and SELL (Pushover fallback); all config editable in the portal",
-      "Infra: dtswai-func + dtswaistore in rg-stockagenthub; portal SWA dtswai-portal; app-level Google auth (ALLOWED_EMAILS), scanner endpoints x-timer-secret",
-      "TO ACTIVATE: re-auth Schwab token (expired ~Jun 2) → set Finviz screener URL in Config → run scanner/ on DESKTOP1 (docs/DESKTOP1_SETUP.md) → paper-validate → flip paper_mode → pause StockAgentHub (shared account)",
-      "Planned: migrate broker Schwab → Alpaca (own creds, paper API, no 7-day re-auth); cross-machine handoff via OPS_HANDOFF.md at repo root",
+      "Hybrid pivot deployed 2026-07-26 (PR #6): scanner never trades — 10-min timeframe + after-hours 1–5 PM PT session POSTs to /api/scanner-alert; operator places orders via /api/manual-order",
+      "Master flipped to LIVE / real money 2026-07-30 (Alpaca account 7311 LLC, PAPER_MODE=false); paper subscriber keys stripped, ~23 subscribers self-onboarded live keys, fanout_enabled=true",
+      "Fully automatic subscriber onboarding via one admin HTTP call (2026-08-03); order-lifecycle hardening closed 12 audit gaps (2026-08-04)",
+      "Specific-lot identification for sells (2026-08-13→16, PRs #8–#14): sell ticket picks the lot, sell_lot_policy lowest_cost default",
+      "Infra: dtswai-func + dtswaistore in rg-stockagenthub; portal SWA dtswai-portal; scanner code source of truth = dev/screening-machine",
+      "DO NOT run setup_desktop1_automation.ps1 — it re-registers the retired 3-scan schedule and kills the live 10-min one",
     ].join("\n"),
   },
 
   // ─── AUTO-EXECUTION ──────────────────────────────────────────
   {
-    name: "StockAgentHub V3 — Stock Swing Trading",
+    name: "StockAgentHub — Options Alerts → Robinhood (repurposed)",
     url: "https://jolly-bush-02b86570f.4.azurestaticapps.net",
     github: "https://github.com/AzharM82/StockAgentHub",
-    purpose:
-      "Flagship LIVE system trading real money on Schwab. Deterministic Python port of the TOS Reversal thinkscript drives stock swing entries — no AI in the hot path. Direct parent of DTSWAI.",
-    stack: "Python Azure Functions, Schwab API, React journal (Microsoft AAD), Azure Table Storage, Pushover",
-    status: "live",
+    purpose: "Was the flagship Schwab stock-swing bot (V3, live 2026-04-24). Being repurposed since 2026-07-24: DESKTOP2 options alerts → cloud sizing/gates → local Claude Agent-SDK executor on DESKTOP2 placing long options on Robinhood.",
+    stack: "Python Azure Functions, React journal (Microsoft AAD), Azure Table Storage, Robinhood Trading MCP, Claude Agent SDK executor, Pushover",
+    status: "paper",
     cost: "$0/mo",
     category: "Auto-Execution",
+    area: "Trading",
     details: [
-      "tos_reversal.py validated penny-perfect vs TOS charts (NOW, WDAY, VEEV @ 3-min); on fresh U1: MARKET BUY at next-bar open, SL = low of bar before U1, TP = +5%",
-      "Timer every 3 min (13:00–20:00 UTC weekdays) over ORBWatchlist; Schwab 1-min bars resampled to 3-min",
-      "Monitor enforces STOP_LOSS → TAKE_PROFIT → RED_REVERSAL exits (market sells, software SL — no broker OCO); holds overnight",
-      "Risk knobs: $5k budget, $1k/ticker, max 5 tickers, skip first 30 min; paper-mode toggle + emergency stop in Config tab",
-      "Full telemetry (SignalLogs/OrderLogs/ExitLogs/TradeJournal) + 3 PM PST daily email report",
-      "Replaced V2 OpenClaw vision approach (~$40/wk Anthropic spend, label drift, needed a Windows box awake)",
-      "Schwab refresh token = 7-day expiry, manual re-auth via scripts/schwab_oauth.py (Pushover alert 24h before)",
+      "V3 stocks pipeline (deterministic TOS Reversal port, no AI in hot path) and ODT V4 options pipeline are being retired in favour of the options-alert flow",
+      "Locked rules Q1–Q7 (2026-07-26): entry on fresh REV U alert, sizing by stop-loss $, marketable-limit near ask, exits = premium SL / +30% TP / REV D / EOD 15:50 ET, re-entry allowed, NO safety net by operator choice",
+      "Branch feat/desktop2-options-integration built, NOT deployed; executor + Dashboard/Trades pages pending",
+      "Schwab refresh token still 7-day expiry (scripts/schwab_oauth.py) until V3 is fully retired",
+      "Infra: stockagenthub-func + stockagenthubstore in rg-stockagenthub",
     ].join("\n"),
   },
   {
@@ -69,6 +67,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "repo-only",
     cost: "$0/mo",
     category: "Auto-Execution",
+    area: "Trading",
     details: [
       "Pipeline: TOS scanner email → chart analyzer (ZigZag + breakout) → Claude Haiku ranks top 3 → email report + paper position tracking",
       "Daily scan 3:30 PM ET, position check 4:15 PM ET; max 3 positions, 5-day max hold, stocks only",
@@ -82,19 +81,23 @@ const PROJECTS: ProjectSeed[] = [
     name: "MultiTimeframe Reversal Scanner (MTF)",
     url: "https://salmon-river-0a7a0c30f.1.azurestaticapps.net",
     github: "https://github.com/AzharM82/multitimeframerev",
-    purpose:
-      "Biggest scanner portal (v2, financial-newspaper light theme): AVWAP Swing Scanner, Bull List paper algo, Day Trades (chart-truth alerts), ATR Matrix, and performance tracking.",
-    stack: "React 19, Vite 6, Tailwind 4, Node Azure Functions, Polygon.io, FinViz Elite, Outlook IMAP, Gmail SMTP, WhatsApp sidecar, Azure Tables + Queue, mtfrev-cron Function App",
+    purpose: "The main trading portal (v2, financial-newspaper theme): AVWAP Swing, Bull List paper algo, Day Trades, ATR Matrix, Sector Desk, Rotation, SPY Conviction, Opening Drive, AVWAP-from-Earnings, Trade Journal, Chart Analysis, Unusual Options, Screeners, and Should-I-Be-Trading consolidation.",
+    stack: "React 19, Vite 6, Tailwind 4, Node Azure Functions, Polygon.io, FinViz Elite, Alpaca IEX, TradingView webhooks, Outlook IMAP, Gmail SMTP, WhatsApp sidecar, Azure Tables + Queue + Blob, mtfrev-cron Function App",
     status: "live",
     cost: "$16/mo",
     category: "Scanners & Signals",
+    area: "Trading",
     details: [
-      "AVWAP Swing Scanner: 4:15 PM ET EOD scan, 209-ticker universe, anchors at ATH / 52W high / 52W low / YTD / swing low; Pullback / Pinch / Reclaim patterns; top 30 emailed nightly",
-      "Bull List: hourly Outlook IMAP poll of D-Bull-Sig TOS alerts → entry/SL/TP via ZigZag → paper-tracked. First week: +$32,129 (+2.05%) on ~$1.57M deployed at 46.9% win rate — positive expectancy, winners outsize losers",
-      "Day Trades: alerts from the local Finviz→TOS-OCR scanner (chart truth) via /api/scanner-alert; WhatsApp delivery through queue + sidecar; realized-P&L panel",
-      "ATR Matrix (added Jun 2026): @SteveDJacobs extension framework over full S&P 500 + NDX (~516 tickers, pure Finviz, ~2.5s scan); extension = (Close−SMA50)/ATR, LEAVE→BLOW-OFF zones, A–G grades, 0–100 setup score, Top Setups with intraday BUYABLE/WAIT flags, Market Posture breadth gauge (RISK_ON/MIXED/RISK_OFF), reverse ticker lookup",
-      "Cron: native Function App mtfrev-cron (Windows Consumption, free) — AVWAP EOD, Bull email hourly, Bull monitor 30-min, ATR scan 4:30 PM ET",
-      "Known Bull-List gaps before live capital: fixed-$ sizing with variable risk, no R-multiple filter, wide SLs, gap-through-SL fills, no concurrency cap",
+      "AVWAP Swing Scanner: 4:15 PM ET EOD scan, anchors at ATH / 52W / YTD / swing low; Pullback / Pinch / Reclaim; top 30 emailed nightly",
+      "Bull List: hourly IMAP poll of D-Bull-Sig TOS alerts → entry/SL/TP via ZigZag → paper-tracked; known gaps before live capital (sizing, R filter, concurrency cap)",
+      "ATR Matrix: @SteveDJacobs extension framework over S&P 500 + NDX, A–G grades, 0–100 setup score, Market Posture gauge; cron 4:30 PM ET",
+      "Sector Desk + Index Leaders (LIVE 2026-08-05) and Rotation on FinViz real-time (LIVE 2026-08-14): one unfiltered export = whole market in <1s",
+      "SPY Conviction Score (LIVE 2026-08-12, alerts-only): six-leg 10-min TradingView indicator emits ARM/BUY/HOLD/REDUCE/SELL decisions; portal records + notifies via /api/spy-conviction",
+      "Opening Drive (SMB PMH-break, Alpaca IEX): 29-day backtest ≈ breakeven; deployed 2% structural stop; edge needs discretion or a catalyst feed",
+      "AVWAP from Earnings (LIVE 2026-08-16): four chart-read levels swept from DESKTOP2 per 39m candle; cross alerts go to phone — never test with a crossing payload",
+      "Trade Journal tab (LIVE 2026-08-08): closed-trades-only, exit-date P&L, local SnapTrade sync 17:30 daily",
+      "Portal consolidation (branch feat/portal-consolidation, 2026-07-17): merging Should-I-Be-Trading + Market Metrics screeners + sector rotation + calculators, Google sign-in (would break 5 machine callers)",
+      "Cron: mtfrev-cron (Windows Consumption); lesson from Opening Drive: swa deploy ships the working tree — commit before deploying",
     ].join("\n"),
   },
   {
@@ -107,6 +110,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "local",
     cost: "$0/mo",
     category: "Scanners & Signals",
+    area: "Trading",
     details: [
       "Born from the principle that the reversal must come off the actual TOS chart — no server-side re-derivation trusted",
       "OCR sanity guard rejects readings >20% off; posts ticker + buy/SL/TP to the MTF portal AlertLog (channel=scanner)",
@@ -124,6 +128,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "local",
     cost: "$0/mo",
     category: "Scanners & Signals",
+    area: "Trading",
     details: [
       "Reads chart state, per-bar indicator plots, OHLCV; Pine compile/debug; replay; screenshots; watchlists; alerts",
       "Page-context chart-model technique reads PER-BAR history of any custom indicator's plots — enables watchlist sweeps (used for the SwingHub ATR strategy scan)",
@@ -140,6 +145,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "local",
     cost: "$0/mo",
     category: "Scanners & Signals",
+    area: "Trading",
     details: [
       "Runs every 10 min during market hours via Task Scheduler",
       "Telegram channel @BabaTraBot; vision model reads the TOS chart locally — no cloud LLM cost",
@@ -155,6 +161,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Scanners & Signals",
+    area: "Trading",
     details: [
       "Verified hits (BA, TSM) but ~$40/wk vision tokens and drift on overlapping labels",
       "Phase 2A endpoint /api/openclaw-signal still exists on stockagenthub-func (log-only)",
@@ -173,6 +180,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "$0/mo",
     category: "Decision Dashboards",
+    area: "Trading",
     details: [
       "Single API /api/market-score?mode=swing|day — Volatility 25% + Momentum 25% + Trend 20% + Breadth 20% + Macro 10%",
       "Decision: ≥65 YES, 40–64 CAUTION, <40 NO; hard overrides VIX>35→NO, SPY<200MA + breadth<30→NO",
@@ -190,6 +198,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "$0/mo",
     category: "Decision Dashboards",
+    area: "Trading",
     details: [
       "APIs: /api/quotes (30s cache), /api/performance (5min), /api/weekly-history (10min)",
       "Redis shared with MTF project; in-memory fallback",
@@ -205,6 +214,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "~$1/mo AI",
     category: "Decision Dashboards",
+    area: "Trading",
     details: [
       "Claude emits structured brief via tools: themes cluster + per-ticker {pct, sector, float, ATR, cap, tag, why ≤140 chars from the actual headline}",
       "Week-ahead: top 30 earnings by cap, 12–18 curated rows with BMO/AMC timing and why-watch",
@@ -221,6 +231,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "local",
     cost: "$0/mo",
     category: "Decision Dashboards",
+    area: "Trading",
     details: ["Weekly cadence; output feeds the swing watchlist"].join("\n"),
   },
   {
@@ -233,6 +244,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "local",
     cost: "$0/mo",
     category: "Decision Dashboards",
+    area: "Trading",
     details: ["Post-trade review loop — pairs with the SnapTrade journal once the Day Trade Algo is live"].join("\n"),
   },
 
@@ -247,6 +259,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "$0/mo",
     category: "Journals",
+    area: "Trading",
     details: [
       "Daily digest email + daily SnapTrade sync cron",
       "App-level password gate (SWA Google IDP broken on identity.7 shard)",
@@ -256,11 +269,12 @@ const PROJECTS: ProjectSeed[] = [
     name: "Voice Journal",
     url: "https://brave-water-0b4523c10.6.azurestaticapps.net",
     github: "",
-    purpose: "Voice-based trading journal — record trade notes via speech-to-text. Captures the WHY behind trades, not just fills.",
-    stack: "React, Azure SWA",
+    purpose: "Voice-first journaling: record audio entries, automatic transcription, chat with AI about your journal. General-purpose (not trading-specific).",
+    stack: "React 19 + Vite 7 + Tailwind SPA on Azure SWA, Python Azure Functions API (voice-journal-api)",
     status: "live",
     cost: "$0/mo",
-    category: "Journals",
+    category: "Journals & Notes",
+    area: "Productivity",
     details: "",
   },
 
@@ -275,6 +289,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "$0/mo",
     category: "Revenue SaaS",
+    area: "Trading",
     details: [
       "Admin dashboard: daily report, user roster, data tools, broadcast messaging (Markdown email to all paid, queue-drained by stockproai-cron)",
       "Stripe paid-but-paywalled bug class root-caused & fixed May 2026 (duplicate customers + missed webhooks); bulk reconcile at subscription-status?report=sync-all",
@@ -292,6 +307,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "$0/mo",
     category: "Revenue SaaS",
+    area: "Trading",
     details: [
       "Phases 1+2 shipped May 2026 (auth, signup, compose, pending payments, feed, track record, replies, pinning, disclaimers)",
       "Zelle auto-reconciliation BUILT but parked on Outlook IMAP credentials — fallback plan: forward Zelle emails to Gmail IMAP (~30 min switch)",
@@ -309,6 +325,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "live",
     cost: "$0/mo",
     category: "Infrastructure & Tools",
+    area: "Infrastructure",
     details: "",
   },
   {
@@ -319,19 +336,25 @@ const PROJECTS: ProjectSeed[] = [
     stack: "Node Azure Functions, React, GitHub API, Gmail SMTP",
     status: "live",
     cost: "$0/mo",
-    category: "Infrastructure & Tools",
+    category: "AI & Learning",
+    area: "Learning",
     details: "",
   },
   {
-    name: "CLI Mesh Network",
+    name: "agentmesh (multi-machine agent mesh)",
     url: "",
-    github: "https://github.com/AzharM82/CLIMeshNetwork",
-    purpose: "Lets Claude Code CLI sessions on separate machines talk to each other — relevant to the DEV ↔ DESKTOP1 split the Day Trade Algo uses.",
-    stack: "Node",
+    github: "https://github.com/AzharM82/Agentmesh",
+    purpose: "Harness-agnostic daemon + mesh CLI so DEV / DESKTOP1 / DESKTOP2 dispatch agent work to each other, stream output back, and hold distributed leases. Built 2026-08-11 to replace the OPS_HANDOFF.md pattern.",
+    stack: "TypeScript / Node 20, local IPC (named pipe), filebus default transport, ssh + http relay alternatives, CI on 7 jobs",
     status: "local",
     cost: "$0/mo",
     category: "Infrastructure & Tools",
-    details: "",
+    area: "Infrastructure",
+    details: [
+      "Patterns from jcode: daemon owns state, CLI is a thin client, one frozen versioned envelope, no TCP listener",
+      "Validated end-to-end on two live daemons; deliberately NOT wired into DTSWAI / MTF production yet",
+      "Private repo (capital-A Agentmesh); npm package name lowercase",
+    ].join("\n"),
   },
   {
     name: "analyze-github-repo (skill)",
@@ -341,19 +364,26 @@ const PROJECTS: ProjectSeed[] = [
     stack: "Claude Code skill",
     status: "local",
     cost: "$0/mo",
-    category: "Infrastructure & Tools",
+    category: "AI & Learning",
+    area: "Learning",
     details: "",
   },
   {
     name: "Project Hub",
     url: "https://victorious-mud-0c0ea020f.1.azurestaticapps.net",
     github: "https://github.com/AzharM82/project-hub",
-    purpose: "This site — portfolio tracker & backlog for all built projects and future ideas.",
+    purpose: "This site — portfolio of every built project (grouped by area: Trading / Learning / Productivity / Infrastructure / Personal & Faith) plus the idea backlog and maintenance tracker. Phone-friendly quick capture.",
     stack: "React 19, Vite 6, Tailwind 4, Node Azure Functions, Azure Table Storage",
     status: "live",
     cost: "$0/mo",
     category: "Infrastructure & Tools",
-    details: "",
+    area: "Infrastructure",
+    details: [
+      "v4 (2026-09-04): top-level areas + editable projects + mobile card layout + PWA manifest + shared-key write gate (HUB_WRITE_KEY)",
+      "Seed reseeds only rows it created (seeded=true); user-added projects and all backlog rows survive a seed-version bump",
+      "Admin tab = maintenance tracker with daily reminder email (GH Actions cron 14:00 UTC → /api/maintenance-remind)",
+      "Tables Projects / Backlog / Maintenance on the azkaaraftersalahsa storage account",
+    ].join("\n"),
   },
 
   // ─── OTHER APPS ──────────────────────────────────────────────
@@ -365,7 +395,8 @@ const PROJECTS: ProjectSeed[] = [
     stack: "Vanilla JS, Tailwind, Python Azure Functions, Anthropic API, Azure Blob Storage",
     status: "live",
     cost: "$0/mo",
-    category: "Other Apps",
+    category: "AI & Learning",
+    area: "Learning",
     details: "",
   },
   {
@@ -376,7 +407,8 @@ const PROJECTS: ProjectSeed[] = [
     stack: "React, Vite, Tailwind, Node Azure Functions, Azure Table Storage, Microsoft OIDC",
     status: "live",
     cost: "$0/mo",
-    category: "Other Apps",
+    category: "Faith Apps",
+    area: "Personal & Faith",
     details: ["Migrated Cosmos DB → Azure Table Storage Mar 2026, saving ~$16/mo"].join("\n"),
   },
   {
@@ -387,7 +419,8 @@ const PROJECTS: ProjectSeed[] = [
     stack: "React, Azure SWA",
     status: "live",
     cost: "$0/mo",
-    category: "Other Apps",
+    category: "Faith Apps",
+    area: "Personal & Faith",
     details: "",
   },
 
@@ -401,6 +434,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
   {
@@ -412,6 +446,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
   {
@@ -423,6 +458,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
   {
@@ -434,6 +470,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
   {
@@ -445,6 +482,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
   {
@@ -456,6 +494,7 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
   {
@@ -467,143 +506,456 @@ const PROJECTS: ProjectSeed[] = [
     status: "archived",
     cost: "$0/mo",
     category: "Archived",
+    area: "Trading",
     details: "",
   },
+  // ─── ADDED 2026-09-04 ────────────────────────────────────────
+  {
+    name: "Unusual Options Activity Scanner (UOA)",
+    url: "",
+    github: "https://github.com/AzharM82/UnusualOptions",
+    purpose: "EOD unusual-options-activity scanner: anomaly score from volume/OI/baselines, signals land in mtfrevstorage blobs and render on the MTF portal's Unusual Options tab.",
+    stack: "Python, GitHub Actions crons (eod 21:45 / baseline 23:00 / oi-confirm 14:30 UTC), Polygon options, Azure Blob",
+    status: "repo-only",
+    cost: "$0/mo (needs Polygon Options Starter ~$29/mo)",
+    category: "Scanners & Signals",
+    area: "Trading",
+    details: [
+      "Code complete 2026-07-02; two data modes (snapshot with OI, aggs fallback); 32 tests pass",
+      "Blocked on the Polygon Options subscription — stocks key is paid, options is a separate plan",
+      "No Azure resources by design; MTF tab E2E validated with a sample latest.json 2026-07-06",
+    ].join("\n"),
+  },
+  {
+    name: "RHAgentic — Robinhood Agentic Trading",
+    url: "",
+    github: "",
+    purpose: "Robinhood Trading MCP connected to a dedicated $300 Agentic account; Phase 2 (Claude Agent SDK trading app driven by TradingView MCP discovery) is designed but paused.",
+    stack: "Robinhood Trading MCP (OAuth), Claude Agent SDK (Node), TradingView MCP",
+    status: "local",
+    cost: "$0/mo",
+    category: "Auto-Execution",
+    area: "Trading",
+    details: [
+      "Phase 1 done 2026-06-19: MCP registered project-scoped in dev/RHAgentic/.mcp.json, read-only smoke test returned live data",
+      "Agent can only trade the Agentic account, read-only elsewhere, never sees the password",
+      "Strategy design paused — which TV watchlist/indicators define the signal is still open",
+    ].join("\n"),
+  },
+  {
+    name: "Screening Machine (DESKTOP1/2 scanner clients)",
+    url: "",
+    github: "",
+    purpose: "Source of truth for the on-machine TOS OCR scanner code: stocks/ (DTSWAI day-trade scanner, DESKTOP1) and options/ (DESKTOP2 alerts). Pushes alerts to WhatsApp + their clouds.",
+    stack: "Python, Tesseract OCR, Win32 automation, ThinkOrSwim, Windows Task Scheduler",
+    status: "live",
+    cost: "$0/mo",
+    category: "Scanners & Signals",
+    area: "Trading",
+    details: [
+      "Dir dev/screening-machine; setup_screening_tasks.ps1 registers the scheduled tasks",
+      "DESKTOP1 Watchdog.ps1 scan-miss check still assumes the old 3-scan schedule (~2h blind spot in local auto-recovery; fix parked 2026-08-25)",
+    ].join("\n"),
+  },
+  {
+    name: "Momentum Backtest",
+    url: "",
+    github: "",
+    purpose: "One-off Python backtest of momentum scan signals with equity curve and HTML report.",
+    stack: "Python, pandas, matplotlib",
+    status: "local",
+    cost: "$0/mo",
+    category: "Research",
+    area: "Trading",
+    details: "Dir dev/Momentum Backtest — scan_backtest.py → backtest_signals.csv / backtest_summary.csv / report.html",
+  },
+  {
+    name: "Mean-Reversion Options Dashboard (LVStocks with HV Potential)",
+    url: "",
+    github: "",
+    purpose: "Sector-organised real-time stock performance dashboard aimed at spotting low-volatility names with high-volatility potential for options mean-reversion setups.",
+    stack: "React + Vite, Node Azure Functions, Azure SWA",
+    status: "repo-only",
+    cost: "$0/mo",
+    category: "Decision Dashboards",
+    area: "Trading",
+    details: "Dir dev/LVStocks with HVPotential — built from a Claude Code prompt; not deployed",
+  },
+  {
+    name: "12% Gain Options Strategy SOP",
+    url: "",
+    github: "",
+    purpose: "Single-page standard operating procedure for the 12% gain options strategy — the checklist to follow before and during a trade.",
+    stack: "Static HTML/CSS/JS",
+    status: "local",
+    cost: "$0/mo",
+    category: "Playbooks",
+    area: "Trading",
+    details: "Dir C:\\Users\\reach\\SOP App",
+  },
+  {
+    name: "Agentic Workflow (control plane)",
+    url: "",
+    github: "https://github.com/AzharM82/AgenticWorkflow",
+    purpose: "The engineering operating system for all projects: blueprint (plan) / overnight (gnhf autonomous runs) / lanes (treehouse worktrees) / crew (firstmate, WSL) over the Kun Chen stack, plus runbooks and the daily loop.",
+    stack: "PowerShell + bash wrappers, gnhf, treehouse, firstmate (WSL2), Claude Code",
+    status: "live",
+    cost: "$0/mo",
+    category: "Infrastructure & Tools",
+    area: "Infrastructure",
+    details: [
+      "Adopted 2026-07-03; shipit/no-mistakes gate retired 2026-07-08; lavish/blueprint HTML plans retired 2026-07-18 (plans go in chat)",
+      "Agents deploy to production since 2026-07-18 — but only validated builds, and the live site must be verified afterwards",
+      "Health check: scripts/doctor.ps1; docs/how-to-use.html is the operating manual",
+    ].join("\n"),
+  },
+  {
+    name: "VulnScanner — Web App Security Assessment",
+    url: "",
+    github: "",
+    purpose: "Local web-app vulnerability scanner (SQLi, XSS, CSRF, headers) producing severity-rated reports with remediation notes; runs as a PM2 Windows service.",
+    stack: "Next.js, PM2 service, Node",
+    status: "local",
+    cost: "$0/mo",
+    category: "Security",
+    area: "Infrastructure",
+    details: "Dir C:\\Users\\reach\\Vuln Management — install-service.bat / pm2-status.bat",
+  },
+  {
+    name: "ToDoWithCal",
+    url: "",
+    github: "",
+    purpose: "Local to-do app with a calendar view — tasks stored in a SQLite file, client + server in one repo.",
+    stack: "Node server + SQLite (tasks.db), JS client",
+    status: "local",
+    cost: "$0/mo",
+    category: "Productivity Apps",
+    area: "Productivity",
+    details: "Dir C:\\Users\\reach\\ToDoWithCal (client/ + server/)",
+  },
+  {
+    name: "Daily Report Card",
+    url: "",
+    github: "",
+    purpose: "Next.js + Prisma app for a daily self-report card / habit scoring.",
+    stack: "Next.js, Prisma, Tailwind",
+    status: "local",
+    cost: "$0/mo",
+    category: "Productivity Apps",
+    area: "Productivity",
+    details: "Dir C:\\Users\\reach\\Daily Report Card\\daily-report-card",
+  },
+  {
+    name: "OpenWhispr dictation + paste shim",
+    url: "",
+    github: "",
+    purpose: "Local Whisper voice dictation (Ctrl+Shift+R) with a WezTerm paste shim so dictated text lands in the terminal; transcriptions.db is the debug source of truth.",
+    stack: "OpenWhispr, local Whisper, WezTerm Lua binding, Node shim",
+    status: "local",
+    cost: "$0/mo",
+    category: "Productivity Apps",
+    area: "Productivity",
+    details: "Dir dev/openwhispr-paste-shim",
+  },
+  {
+    name: "TaxSmartPro / TaxShield Pro",
+    url: "",
+    github: "",
+    purpose: "Personal tax command center for a high-income W-2 earner with two LLCs — multi-year strategy + filing assistant. Currently a vibe-coding prompt only, not built.",
+    stack: "Prompt spec only (dev/TaxSmartPro/TaxOptimizer_Vibe_Coding_Prompt.md)",
+    status: "repo-only",
+    cost: "$0/mo",
+    category: "Personal Finance",
+    area: "Productivity",
+    details: "",
+  },
+  {
+    name: "AI Learning Path Generator",
+    url: "",
+    github: "",
+    purpose: "Python backend that generates a personalised learning path (modules, resources, sequencing) for a topic using an LLM.",
+    stack: "Python FastAPI (routers / services / models), LLM API",
+    status: "local",
+    cost: "$0/mo",
+    category: "AI & Learning",
+    area: "Learning",
+    details: "Dir C:\\Users\\reach\\AIGeneratedLearningPath Generator\\backend",
+  },
+  {
+    name: "Beginner Video Series (trading education)",
+    url: "",
+    github: "",
+    purpose: "Outline for a beginner trading video series — content planning doc.",
+    stack: "Word document",
+    status: "local",
+    cost: "$0/mo",
+    category: "Content",
+    area: "Learning",
+    details: "dev/Beginner Video/Beginner Video Series.docx",
+  },
+  {
+    name: "Trading Journal App (Journal Everyday)",
+    url: "",
+    github: "",
+    purpose: "Early monorepo trading journal (React + Azure Functions + Cosmos DB) — superseded by Trading Journal & Lessons.",
+    stack: "Vite + React + TS, Azure Functions, Cosmos DB, Blob",
+    status: "archived",
+    cost: "$0/mo",
+    category: "Archived",
+    area: "Trading",
+    details: "Dir C:\\Users\\reach\\Journal Everyday",
+  },
+
 ];
 
 interface BacklogSeed {
   title: string;
   description: string;
   category: string;
+  area: string;
   priority: string;
+  status: string; // idea | planned | in-progress | done | dropped
 }
 
+// Backlog seeding is ADDITIVE: an item is inserted only when no row with the same
+// derived rowKey exists. Existing rows are never modified or deleted by the seed.
 const BACKLOG: BacklogSeed[] = [
   {
     title: "DTSWAI: activate live trading",
-    description:
-      "Re-auth Schwab token (expired ~Jun 2) → set Finviz day-trader screener URL in portal Config → run scanner/ on DESKTOP1 → add portal origin to Google OAuth client → paper-validate → flip paper_mode → pause StockAgentHub (shared account).",
+    description: "Done 2026-07-30 — master flipped to LIVE / real money on Alpaca, ~23 subscribers onboarded, fan-out enabled.",
     category: "Day Trade Algo",
+    area: "Trading",
     priority: "high",
+    status: "done",
   },
   {
     title: "DTSWAI: migrate broker Schwab → Alpaca",
-    description:
-      "Own broker creds, real paper API, no 7-day browser re-auth. Also resolves the shared-token fragility between DTSWAI and StockAgentHub.",
+    description: "Done — DTSWAI runs on Alpaca (master + subscriber keys); no more 7-day Schwab re-auth for the day-trade system.",
     category: "Day Trade Algo",
+    area: "Trading",
     priority: "high",
+    status: "done",
+  },
+  {
+    title: "StockAgentHub: finish DESKTOP2 options executor + deploy",
+    description: "Branch feat/desktop2-options-integration is built but not deployed. Remaining: Claude Agent-SDK executor on DESKTOP2 (Robinhood MCP), Dashboard/Trades pages, remaining-capital tracking, idempotent client_order_id, daily_loss_stop, partial-fill reconciliation.",
+    category: "Auto-Execution",
+    area: "Trading",
+    priority: "high",
+    status: "planned",
+  },
+  {
+    title: "Bull-List hardening before live capital",
+    description: "Fixed-risk sizing qty = riskBudget/(entry−SL); reject setups with R < 1.5; cap SL distance; handle gap-through-SL fills; add MAX_CONCURRENT_POSITIONS.",
+    category: "Scanner",
+    area: "Trading",
+    priority: "high",
+    status: "idea",
+  },
+  {
+    title: "DESKTOP1 Watchdog: fix scan-miss blind spot",
+    description: "Watchdog.ps1 still checks the retired 3-scan SCAN_TIMES_PT, leaving a ~2h hole in local auto-recovery for the 10-min scanner. Fix drafted and parked 2026-08-25; cloud Pushover (20 min) unaffected.",
+    category: "Ops",
+    area: "Trading",
+    priority: "medium",
+    status: "planned",
+  },
+  {
+    title: "MTF portal consolidation + Google sign-in",
+    description: "Branch feat/portal-consolidation: merge Should-I-Be-Trading, Market Metrics screeners, sector rotation and 4 calculators into the portal. Auth would break 5 machine callers — needs a machine-token path first.",
+    category: "Portal",
+    area: "Trading",
+    priority: "medium",
+    status: "in-progress",
+  },
+  {
+    title: "UOA scanner: subscribe Polygon Options Starter + backfill",
+    description: "Options data is a separate Polygon plan (~$29/mo). After subscribing: run workflow_dispatch backfill once (20-day baselines), then the three GH Actions crons take over. Set GitHub secrets via scripts/set-github-secrets.ps1.",
+    category: "Scanner",
+    area: "Trading",
+    priority: "medium",
+    status: "idea",
+  },
+  {
+    title: "Opening Drive: add a real catalyst feed",
+    description: "29-day backtest says the PMH-break setup is ≈breakeven; the ceiling is signal quality. Skip-YELLOW regime roughly doubles edge. A news/catalyst feed (or human discretion) is the missing piece.",
+    category: "Scanner",
+    area: "Trading",
+    priority: "low",
+    status: "idea",
+  },
+  {
+    title: "RHAgentic Phase 2: strategy design",
+    description: "Claude Agent SDK app over the Robinhood Trading MCP. Open: which TradingView watchlists/indicators define the signal, timeframe, and how entry/SL/TP derive from the chart.",
+    category: "AI Agent",
+    area: "Trading",
+    priority: "low",
+    status: "idea",
   },
   {
     title: "Wire 'Should I Be Trading' regime gate into DTSWAI",
     description: "Use the 0-100 Quality Score / YES-CAUTION-NO verdict as a don't-trade-today gate ahead of scanner entries.",
     category: "Day Trade Algo",
+    area: "Trading",
     priority: "medium",
+    status: "idea",
   },
   {
     title: "Wire ATR Matrix setup score into DTSWAI universe",
     description: "Rank/filter the day-trade candidate universe using the ATR Matrix 0-100 setup score and Market Posture bias (buy vs sell focus).",
     category: "Day Trade Algo",
+    area: "Trading",
     priority: "medium",
-  },
-  {
-    title: "Bull-List hardening before live capital",
-    description:
-      "Fixed-risk sizing qty = riskBudget/(entry−SL); reject setups with R < 1.5; cap SL distance; handle gap-through-SL fills; add MAX_CONCURRENT_POSITIONS.",
-    category: "Scanner",
-    priority: "high",
+    status: "idea",
   },
   {
     title: "SwingHub: Zelle auto-reconciliation via Gmail IMAP",
     description: "Outlook IMAP auth is blocked account-side. Forward Chase Zelle emails to Gmail, point the scanner at imap.gmail.com (~30 min switch). All other code is built + deployed.",
     category: "SaaS",
+    area: "Trading",
     priority: "medium",
+    status: "idea",
   },
   {
     title: "Morning War Room Agent",
-    description:
-      "AI agent at 8:30 AM ET. Calls SIBT, ATR Matrix posture, checks focus stocks for gaps, reads overnight news. Produces a Pushover/WhatsApp briefing.",
+    description: "AI agent at 8:30 AM ET. Calls SIBT, ATR Matrix posture, checks focus stocks for gaps, reads overnight news. Produces a Pushover/WhatsApp briefing.",
     category: "AI Agent",
+    area: "Trading",
     priority: "medium",
+    status: "idea",
   },
   {
     title: "Trade Journal Analyst Agent",
-    description:
-      "Agent that cross-references journal trades with market conditions (SIBT score). Finds behavioral patterns: win rates by condition, time, setup. Jeff's AI Coach is the v1 of this.",
+    description: "Agent that cross-references journal trades with market conditions (SIBT score). Finds behavioral patterns: win rates by condition, time, setup. Jeff's AI Coach is the v1 of this.",
     category: "AI Agent",
+    area: "Trading",
     priority: "medium",
+    status: "idea",
   },
   {
     title: "Position Watchdog Agent",
     description: "Monitors open positions via Polygon. Alerts on stops hit, targets reached, significant moves. End-of-day P&L summary.",
     category: "AI Agent",
+    area: "Trading",
     priority: "low",
+    status: "idea",
   },
   {
     title: "Focus Stock Curator Agent",
     description: "Weekly agent scanning StockPro's focus stocks. Flags broken trends for removal, suggests new additions.",
     category: "AI Agent",
+    area: "Trading",
     priority: "low",
+    status: "idea",
+  },
+  {
+    title: "Wire agentmesh into DTSWAI / MTF ops",
+    description: "agentmesh is validated E2E but standalone. Replace the OPS_HANDOFF.md + RDP handoff between DEV and DESKTOP1/DESKTOP2 with mesh dispatch + leases. Push the private repo first.",
+    category: "Tooling",
+    area: "Infrastructure",
+    priority: "medium",
+    status: "idea",
+  },
+  {
+    title: "Project Hub: JSON export/import + local mode",
+    description: "One-click export of Projects/Backlog/Maintenance as JSON for backup, and an import path so the hub can also run against a local Azurite / SQLite store when offline.",
+    category: "Tooling",
+    area: "Infrastructure",
+    priority: "low",
+    status: "idea",
+  },
+  {
+    title: "Weekly 'what did I build' digest email",
+    description: "Sunday email summarising projects touched (git activity across dev/), backlog items moved, and maintenance tasks due — a learning log of the week.",
+    category: "Habit",
+    area: "Learning",
+    priority: "low",
+    status: "idea",
   },
 ];
 
+const SEED_FLAG = "seeded";
+
+function projectRowKey(name: string): string {
+  return name.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 100);
+}
+
+/**
+ * Reseed PROJECTS non-destructively:
+ *  - rows previously written by the seed (seeded === true) are deleted and re-created
+ *  - user-added rows (no seeded flag) are left untouched
+ *  - Backlog rows are NEVER deleted; missing seed titles are inserted
+ */
 export async function seedData(): Promise<{ projects: number; backlog: number }> {
   const pc = await getProjectsClient();
   const bc = await getBacklogClient();
 
-  // Clear existing data for a clean reseed
+  // Remove only rows the seed itself created
   try {
     const existingProjects = pc.listEntities({ queryOptions: { filter: "PartitionKey eq 'projects'" } });
     for await (const entity of existingProjects) {
-      await pc.deleteEntity(entity.partitionKey as string, entity.rowKey as string);
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const existingBacklog = bc.listEntities({ queryOptions: { filter: "PartitionKey eq 'backlog'" } });
-    for await (const entity of existingBacklog) {
-      await bc.deleteEntity(entity.partitionKey as string, entity.rowKey as string);
+      // seeded rows, plus legacy pre-v4 rows (no flag, not user-created "u-" keys)
+      const legacy = entity[SEED_FLAG] === undefined && !String(entity.rowKey).startsWith("u-");
+      if (entity[SEED_FLAG] === true || legacy) {
+        await pc.deleteEntity(entity.partitionKey as string, entity.rowKey as string);
+      }
     }
   } catch { /* ignore */ }
 
   let projectCount = 0;
   let backlogCount = 0;
+  const deadProjects = await getTombstones("projects");
+  const deadBacklog = await getTombstones("backlog");
 
-  // Seed projects
   for (const p of PROJECTS) {
-    const rowKey = p.name.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 100);
-    await pc.createEntity({
-      partitionKey: "projects",
-      rowKey,
-      name: p.name,
-      url: p.url,
-      github: p.github,
-      purpose: p.purpose,
-      stack: p.stack,
-      status: p.status,
-      cost: p.cost,
-      category: p.category,
-      details: p.details,
-    });
+    if (deadProjects.has(projectRowKey(p.name))) continue; // operator deleted it — stay deleted
+    await pc.upsertEntity(
+      {
+        partitionKey: "projects",
+        rowKey: projectRowKey(p.name),
+        name: p.name,
+        url: p.url,
+        github: p.github,
+        purpose: p.purpose,
+        stack: p.stack,
+        status: p.status,
+        cost: p.cost,
+        category: p.category,
+        area: p.area,
+        details: p.details,
+        [SEED_FLAG]: true,
+        updatedAt: new Date().toISOString(),
+      },
+      "Replace",
+    );
     projectCount++;
   }
 
-  // Seed backlog
   for (const b of BACKLOG) {
     const rowKey = b.title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 100);
+    if (deadBacklog.has(rowKey)) continue;
+    try {
+      await bc.getEntity("backlog", rowKey);
+      continue; // already present — never overwrite user state
+    } catch {
+      // not found → insert
+    }
     await bc.createEntity({
       partitionKey: "backlog",
       rowKey,
       title: b.title,
       description: b.description,
       category: b.category,
+      area: b.area,
       priority: b.priority,
-      status: "idea",
+      status: b.status,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      [SEED_FLAG]: true,
     });
     backlogCount++;
   }
 
-  // Record seed version so we only reseed when the seed data changes
   await pc.upsertEntity({ partitionKey: "meta", rowKey: "seedVersion", value: SEED_VERSION });
 
   return { projects: projectCount, backlog: backlogCount };

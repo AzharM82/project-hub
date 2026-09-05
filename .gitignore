@@ -7,3 +7,4 @@ api/.env
 api/local.settings.json
 *.log
 .vite
+.secrets/

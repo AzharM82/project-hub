@@ -1,3 +1,10 @@
+export const AREAS = ["Trading", "Learning", "Productivity", "Infrastructure", "Personal & Faith"] as const;
+export type Area = (typeof AREAS)[number];
+
+export const PROJECT_STATUSES = ["live", "paper", "local", "repo-only", "archived"] as const;
+export const BACKLOG_STATUSES = ["idea", "planned", "in-progress", "done", "dropped"] as const;
+export const PRIORITIES = ["high", "medium", "low"] as const;
+
 export interface Project {
   id: string;
   name: string;
@@ -8,7 +15,10 @@ export interface Project {
   status: string;
   cost: string;
   category: string;
+  area: string;
   details: string;
+  seeded?: boolean;
+  updatedAt?: string;
 }
 
 export interface BacklogItem {
@@ -16,9 +26,11 @@ export interface BacklogItem {
   title: string;
   description: string;
   category: string;
+  area: string;
   priority: string;
   status: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface MaintenanceTask {

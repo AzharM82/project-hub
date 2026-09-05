@@ -1,0 +1,14 @@
+{
+  "name": "Project Hub",
+  "short_name": "ProjectHub",
+  "description": "Portfolio of built projects and idea backlog",
+  "start_url": "/#backlog",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
