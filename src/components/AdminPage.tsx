@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { MaintenanceTask } from "../types.js";
+import { api, json } from "../lib/api.js";
 import { MaintenanceForm } from "./MaintenanceForm.js";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -74,16 +75,12 @@ export function AdminPage() {
   }, [fetchItems]);
 
   async function handleDelete(id: string) {
-    await fetch(`/api/maintenance?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    await api(`/api/maintenance?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     fetchItems();
   }
 
   async function handleStatusChange(item: MaintenanceTask, newStatus: string) {
-    await fetch(`/api/maintenance?id=${encodeURIComponent(item.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
+    await api(`/api/maintenance?id=${encodeURIComponent(item.id)}`, { method: "PUT", ...json({ status: newStatus }) });
     fetchItems();
   }
 

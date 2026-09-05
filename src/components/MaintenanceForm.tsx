@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { MaintenanceTask } from "../types.js";
+import { api, json } from "../lib/api.js";
 
 interface MaintenanceFormProps {
   item?: MaintenanceTask | null;
@@ -39,17 +40,9 @@ export function MaintenanceForm({ item, onClose, onSaved }: MaintenanceFormProps
     setSaving(true);
     try {
       if (isEdit) {
-        await fetch(`/api/maintenance?id=${encodeURIComponent(item.id)}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project, task, category, dueDate, status, notes }),
-        });
+        await api(`/api/maintenance?id=${encodeURIComponent(item.id)}`, { method: "PUT", ...json({ project, task, category, dueDate, status, notes }) });
       } else {
-        await fetch("/api/maintenance", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project, task, category, dueDate, status, notes }),
-        });
+        await api("/api/maintenance", { method: "POST", ...json({ project, task, category, dueDate, status, notes }) });
       }
       onSaved();
       onClose();

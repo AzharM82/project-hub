@@ -1,5 +1,6 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
 import { getMaintenanceClient } from "../lib/storage.js";
+import { isWriteAllowed, unauthorized } from "../lib/auth.js";
 
 interface MaintenanceInput {
   project?: string;
@@ -15,6 +16,9 @@ async function maintenanceHandler(
   _ctx: InvocationContext,
 ): Promise<HttpResponseInit> {
   try {
+    // Writes need the key; checked before touching storage so a missing key is a clean 401.
+    if (req.method !== "GET" && !isWriteAllowed(req)) return unauthorized();
+
     const client = await getMaintenanceClient();
 
     // ─── GET ─────────────────────────────────────────

@@ -41,3 +41,22 @@ export async function getMaintenanceClient(): Promise<TableClient> {
   }
   return maintenanceClient;
 }
+
+/** Tombstones live in the Projects table, partition "tombstone", rowKey "<table>:<id>". */
+export async function addTombstone(table: "projects" | "backlog", id: string): Promise<void> {
+  const pc = await getProjectsClient();
+  await pc.upsertEntity({ partitionKey: "tombstone", rowKey: `${table}:${id}`, deletedAt: new Date().toISOString() });
+}
+
+export async function getTombstones(table: "projects" | "backlog"): Promise<Set<string>> {
+  const pc = await getProjectsClient();
+  const out = new Set<string>();
+  try {
+    const it = pc.listEntities({ queryOptions: { filter: "PartitionKey eq 'tombstone'" } });
+    for await (const e of it) {
+      const rk = String(e.rowKey);
+      if (rk.startsWith(table + ":")) out.add(rk.slice(table.length + 1));
+    }
+  } catch { /* ignore */ }
+  return out;
+}
